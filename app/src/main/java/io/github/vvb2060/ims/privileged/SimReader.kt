@@ -10,6 +10,7 @@ import android.os.ServiceManager
 import android.system.Os
 import android.telephony.SubscriptionManager
 import android.util.Log
+import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 
 class SimReader : Instrumentation() {
@@ -26,10 +27,27 @@ class SimReader : Instrumentation() {
     @SuppressLint("MissingPermission")
     override fun start() {
         super.start()
+        var index = 0
+        val maxRetries = 50
+        while (!Shizuku.pingBinder()) {
+            index++
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                break
+            }
+            if (index >= maxRetries) {
+                break
+            }
+        }
         val binder = ServiceManager.getService(Context.ACTIVITY_SERVICE)
         val am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(binder))
         Log.i(TAG, "starting shell permission delegation")
-        am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        try {
+            am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startDelegateShellPermissionIdentity failed", t)
+        }
         try {
             Log.d(TAG, "start read sim info list")
             val subManager =
@@ -44,7 +62,11 @@ class SimReader : Instrumentation() {
             Log.e(TAG, "failed to read sim info list", e)
             finish(Activity.RESULT_CANCELED, Bundle())
         } finally {
-            am.stopDelegateShellPermissionIdentity()
+            try {
+                am.stopDelegateShellPermissionIdentity()
+            } catch (t: Throwable) {
+                Log.w(TAG, "stopDelegateShellPermissionIdentity failed", t)
+            }
             Log.i(TAG, "stopped shell permission delegation")
         }
     }

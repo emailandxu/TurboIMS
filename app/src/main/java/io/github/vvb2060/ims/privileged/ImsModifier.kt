@@ -186,7 +186,11 @@ class ImsModifier : Instrumentation() {
         val binder = ServiceManager.getService(Context.ACTIVITY_SERVICE)
         val am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(binder))
         Log.i(TAG, "starting shell permission delegation")
-        am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        try {
+            am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startDelegateShellPermissionIdentity failed", t)
+        }
         try {
             val cm = context.getSystemService(CarrierConfigManager::class.java)
             val sm = context.getSystemService(SubscriptionManager::class.java)
@@ -223,7 +227,11 @@ class ImsModifier : Instrumentation() {
                 }
             }
         } finally {
-            am.stopDelegateShellPermissionIdentity()
+            try {
+                am.stopDelegateShellPermissionIdentity()
+            } catch (t: Throwable) {
+                Log.w(TAG, "stopDelegateShellPermissionIdentity failed", t)
+            }
             Log.i(TAG, "stopped shell permission delegation")
         }
     }

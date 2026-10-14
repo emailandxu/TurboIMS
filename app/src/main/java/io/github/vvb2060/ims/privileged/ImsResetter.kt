@@ -12,6 +12,7 @@ import android.telephony.TelephonyFrameworkInitializer
 import android.util.Log
 import com.android.internal.telephony.ISub
 import com.android.internal.telephony.ITelephony
+import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 
 class ImsResetter : Instrumentation() {
@@ -30,9 +31,26 @@ class ImsResetter : Instrumentation() {
         }
 
         val result = Bundle()
+        var index = 0
+        val maxRetries = 50
+        while (!Shizuku.pingBinder()) {
+            index++
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                break
+            }
+            if (index >= maxRetries) {
+                break
+            }
+        }
         val binder = ServiceManager.getService(Context.ACTIVITY_SERVICE)
         val am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(binder))
-        am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        try {
+            am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startDelegateShellPermissionIdentity failed", t)
+        }
         try {
             val subId = arguments.getInt(BUNDLE_SELECT_SIM_ID, -1)
             val sm = context.getSystemService(SubscriptionManager::class.java)
@@ -71,7 +89,11 @@ class ImsResetter : Instrumentation() {
             result.putBoolean(BUNDLE_RESULT, false)
             result.putString(BUNDLE_RESULT_MSG, t.message ?: t.javaClass.simpleName)
         } finally {
-            am.stopDelegateShellPermissionIdentity()
+            try {
+                am.stopDelegateShellPermissionIdentity()
+            } catch (t: Throwable) {
+                Log.w(TAG, "stopDelegateShellPermissionIdentity failed", t)
+            }
         }
 
         finish(Activity.RESULT_OK, result)

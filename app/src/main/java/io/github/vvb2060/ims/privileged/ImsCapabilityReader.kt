@@ -12,6 +12,7 @@ import android.telephony.NetworkRegistrationInfo
 import android.telephony.TelephonyManager
 import android.util.Log
 import com.android.internal.telephony.ITelephony
+import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 
 class ImsCapabilityReader : Instrumentation() {
@@ -45,9 +46,26 @@ class ImsCapabilityReader : Instrumentation() {
         }
 
         val result = Bundle()
+        var index = 0
+        val maxRetries = 50
+        while (!Shizuku.pingBinder()) {
+            index++
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                break
+            }
+            if (index >= maxRetries) {
+                break
+            }
+        }
         val binder = ServiceManager.getService(Context.ACTIVITY_SERVICE)
         val am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(binder))
-        am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        try {
+            am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startDelegateShellPermissionIdentity failed", t)
+        }
         try {
             val subId = arguments.getInt(BUNDLE_SELECT_SIM_ID, -1)
             if (subId < 0) {
@@ -118,7 +136,11 @@ class ImsCapabilityReader : Instrumentation() {
             Log.e(TAG, "read IMS capabilities failed", t)
             result.putString(BUNDLE_RESULT_MSG, t.message ?: t.javaClass.simpleName)
         } finally {
-            am.stopDelegateShellPermissionIdentity()
+            try {
+                am.stopDelegateShellPermissionIdentity()
+            } catch (t: Throwable) {
+                Log.w(TAG, "stopDelegateShellPermissionIdentity failed", t)
+            }
         }
 
         finish(Activity.RESULT_OK, result)

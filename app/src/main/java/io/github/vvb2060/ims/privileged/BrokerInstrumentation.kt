@@ -11,6 +11,7 @@ import android.system.Os
 import android.telephony.CarrierConfigManager
 import android.telephony.SubscriptionManager
 import android.util.Log
+import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 
 class BrokerInstrumentation : Instrumentation() {
@@ -26,9 +27,26 @@ class BrokerInstrumentation : Instrumentation() {
         }
 
         val result = Bundle()
+        var index = 0
+        val maxRetries = 50
+        while (!Shizuku.pingBinder()) {
+            index++
+            try {
+                Thread.sleep(100)
+            } catch (_: InterruptedException) {
+                break
+            }
+            if (index >= maxRetries) {
+                break
+            }
+        }
         val binder = ServiceManager.getService(Context.ACTIVITY_SERVICE)
         val am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(binder))
-        am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        try {
+            am.startDelegateShellPermissionIdentity(Os.getuid(), null)
+        } catch (t: Throwable) {
+            Log.w(TAG, "startDelegateShellPermissionIdentity failed", t)
+        }
         try {
             val cm = context.getSystemService(CarrierConfigManager::class.java)
             val sm = context.getSystemService(SubscriptionManager::class.java)
@@ -68,7 +86,11 @@ class BrokerInstrumentation : Instrumentation() {
             result.putBoolean(ImsModifier.BUNDLE_RESULT, false)
             result.putString(ImsModifier.BUNDLE_RESULT_MSG, t.message ?: t.javaClass.simpleName)
         } finally {
-            am.stopDelegateShellPermissionIdentity()
+            try {
+                am.stopDelegateShellPermissionIdentity()
+            } catch (t: Throwable) {
+                Log.w(TAG, "stopDelegateShellPermissionIdentity failed", t)
+            }
         }
 
         finish(Activity.RESULT_OK, result)
